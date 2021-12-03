@@ -1,0 +1,6 @@
+matplotlib==2.2.2
+numpy==1.17.4
+pandas==0.23.0
+tensorflow-addons==0.12.1
+jiwer==2.3.0
+ipython
