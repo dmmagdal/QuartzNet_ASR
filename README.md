@@ -6,20 +6,20 @@ Implement Nvidia's QuartzNet neural net for the task of Automatic Speech Recogni
 
 ### Scripts
 
- > load_model.py
- >> Initializes 3 QuartzNet models (5x5, 10x5, 15x5) as well as testing the custom StringMap class in quartznet.py used as a functional replacement for tf.keras.layers.StringLookup for those running versions Tensorflow below 2.6.0.
+ ```load_model.py```
+ - Initializes 3 QuartzNet models (5x5, 10x5, 15x5) as well as testing the custom StringMap class in quartznet.py used as a functional replacement for tf.keras.layers.StringLookup for those running versions Tensorflow below 2.6.0.
 
- > asr_ctc_quartznet.py
- >> A spinoff of the ASR using CTC Keras example that replaces the DeepSpeech2 model with QuartzNet 15x5 and trains on the LJSpeech dataset.
+ ```asr_ctc_quartznet.py```
+ - A spinoff of the ASR using CTC Keras example that replaces the DeepSpeech2 model with QuartzNet 15x5 and trains on the LJSpeech dataset.
 
- > Dockerfile
- >> Dockerfile for running asr_ctc_quartznet.py in a docker container. 
+ ```Dockerfile```
+ - Dockerfile for running asr_ctc_quartznet.py in a docker container. 
 
 ### Sources
 
- > [Nvidia QuartzNet paper](https://arxiv.org/pdf/1910.10261.pdf)
- > [Nvidia NeMo GitHub](https://github.com/NVIDIA/NeMo/tree/main/nemo)
- > [Jaco-Assistant GitLab](https://gitlab.com/Jaco-Assistant/Scribosermo/)
- > [LibriSpeech download page](https://www.openslr.org/12/)
- > [LJSpeech download page](https://keithito.com/LJ-Speech-Dataset/)
- > [Automatic Speech Recognition using CTC Keras example](https://keras.io/examples/audio/ctc_asr/)
+ - [Nvidia QuartzNet paper](https://arxiv.org/pdf/1910.10261.pdf)
+ - [Nvidia NeMo GitHub](https://github.com/NVIDIA/NeMo/tree/main/nemo)
+ - [Jaco-Assistant GitLab](https://gitlab.com/Jaco-Assistant/Scribosermo/)
+ - [LibriSpeech download page](https://www.openslr.org/12/)
+ - [LJSpeech download page](https://keithito.com/LJ-Speech-Dataset/)
+ - [Automatic Speech Recognition using CTC Keras example](https://keras.io/examples/audio/ctc_asr/)
