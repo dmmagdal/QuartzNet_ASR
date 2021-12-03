@@ -1,8 +1,8 @@
 # Docker file to run a container that will run the asr_ctc_quartznet.py
-# in Python 3 for Tensorflow 2.6.0 (no GPU).
+# in Python 3 for Tensorflow 2.4.0 (no GPU).
 
-# Load tensorflow image for tensorflow 2.6.0 and Python 3.
-FROM tensorflow/tensorflow:2.6.0
+# Load tensorflow image for tensorflow 2.4.0 and Python 3.
+FROM tensorflow/tensorflow:2.4.0
 
 # Set locale for variable (pulled from dockerfile in original OpenAI
 # GPT2 repository).
