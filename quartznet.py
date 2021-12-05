@@ -219,8 +219,8 @@ class QuartzNet(keras.Model):
 def CTCLoss(y_true, y_pred):
 	# Compute the training-time loss value.
 	batch_len = tf.cast(tf.shape(y_true)[0], dtype="int64")
-	input_length = tf.cast(tf.shape(y_pred)[0], dtype="int64")
-	label_length = tf.cast(tf.shape(y_true)[0], dtype="int64")
+	input_length = tf.cast(tf.shape(y_pred)[1], dtype="int64")
+	label_length = tf.cast(tf.shape(y_true)[1], dtype="int64")
 
 	input_length = input_length * tf.ones(shape=(batch_len, 1), dtype="int64")
 	label_length = label_length * tf.ones(shape=(batch_len, 1), dtype="int64")
@@ -228,6 +228,7 @@ def CTCLoss(y_true, y_pred):
 	loss = keras.backend.ctc_batch_cost(
 		y_true, y_pred, input_length, label_length
 	)
+
 	return loss
 
 
@@ -236,7 +237,7 @@ def decode_batch_predictions(pred, num_to_char):
 
 	# Use greedy search. For complex tasks, use beam search.
 	results = keras.backend.ctc_decode(
-		pred, input_length=input_length, greedy=True
+		pred, input_length=input_len, greedy=True
 	)[0][0]
 
 	# Iterate over the results and get back the text.
@@ -262,7 +263,7 @@ class ASRCallbackEval(keras.callbacks.Callback):
 		targets = []
 		for batch in self.dataset:
 			X, y = batch
-			batch_predictions = model.predict(X)
+			batch_predictions = self.model.predict(X)
 			batch_predictions = decode_batch_predictions(
 				batch_predictions, self.num_to_char
 			)
