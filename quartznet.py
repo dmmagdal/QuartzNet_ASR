@@ -232,6 +232,28 @@ def CTCLoss(y_true, y_pred):
 	return loss
 
 
+def CTCNNLoss(y_true, y_pred):
+	# Compute the training-time loss value.\	
+	batch_len = tf.cast(tf.shape(y_true)[0], dtype="int64")
+	logit_length = tf.cast(
+		tf.math.ceil(tf.shape(y_pred)[1] / 2), 
+		dtype="int64"
+	)
+	#logit_length = tf.cast(tf.shape(y_pred)[1], dtype="int64")
+	label_length = tf.cast(tf.shape(y_true)[1], dtype="int64")
+
+
+	logit_length = logit_length * tf.ones(shape=(batch_len), dtype="int64")
+	label_length = label_length * tf.ones(shape=(batch_len), dtype="int64")
+
+	loss = tf.nn.ctc_loss(
+		y_true, y_pred, label_length=label_length, logit_length=logit_length,
+		blank_index=-1, logits_time_major=False
+	)
+
+	return loss
+
+
 def decode_batch_predictions(pred, num_to_char):
 	input_len = np.ones(pred.shape[0]) * pred.shape[1]
 
@@ -244,7 +266,7 @@ def decode_batch_predictions(pred, num_to_char):
 	output_text = []
 	for result in results:
 		result = tf.strings.reduce_join(
-			num_to_char(result),
+			num_to_char(result)
 		).numpy().decode('utf-8')
 		output_text.append(result)
 	return output_text

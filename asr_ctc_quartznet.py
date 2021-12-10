@@ -18,7 +18,7 @@ from IPython import display
 from jiwer import wer
 from config import Config
 from quartznet import QuartzNet, CTCLoss, decode_batch_predictions
-from quartznet import ASRCallbackEval, StringMap
+from quartznet import ASRCallbackEval, StringMap, CTCNNLoss
 
 
 def main():
@@ -91,6 +91,29 @@ def main():
 		vocabulary=char_to_num.get_vocabulary(), oov_token="", 
 		invert=True
 	)
+	char_to_num = tf.keras.layers.StringLookup(
+		vocabulary=chars, oov_token=""
+	)
+	num_to_char = tf.keras.layers.StringLookup(
+		vocabulary=char_to_num.get_vocabulary(), oov_token="", 
+		invert=True
+	)
+	'''
+	char_to_num = tf.lookup.StaticHashTable(
+		initializer=tf.lookup.KeyValueTensorInitializer(
+			keys=tf.constant([u for i, u in enumerate(chars)]),
+			values=tf.constant([i for i, u in enumerate(chars)]),
+		),
+		default_value=tf.constant(" "),
+	)
+	num_to_char = tf.lookup.StaticHashTable(
+		initializer=tf.lookup.KeyValueTensorInitializer(
+			keys=tf.constant([i for i, u in enumerate(chars)]),
+			values=tf.constant([u for i, u in enumerate(chars)]),
+		),
+		default_value=tf.constant(" "),
+	)
+	'''
 	print(
 		f"The vocabulary is: {char_to_num.get_vocabulary()}"
 		f" (size = {char_to_num.vocabulary_size()})"
@@ -127,11 +150,11 @@ def main():
 		return spectrogram, label
 
 	# Create dataset objects.
-	batch_size = 32
+	batch_size = 8#32
 	train_dataset = tf.data.Dataset.from_tensor_slices(
 		(list(df_train["file_name"]), 
 		list(df_train["normalized_transcription"]))
-	)
+	).take(batch_size)
 	train_dataset = (
 		train_dataset.map(
 			encode_single_sample, num_parallel_calls=tf.data.AUTOTUNE
@@ -154,26 +177,73 @@ def main():
 	# Model input and output parameters. Input is mel-spectrograms and
 	# output is a character from the vocabulary.
 	c_in = n_fft // 2 + 1
-	c_out = len(char_to_num.get_vocabulary())
+	#c_out = len(char_to_num.get_vocabulary())
+	c_out = char_to_num.vocabulary_size()
 
 	# Training variables.
 	epochs = 1 # From Keras ASR_CTC example
 	#epochs = 300 # From Quartznet paper 
 	#epochs = 400 # From Quartznet paper (SOTA)
-	learning_rate = 1e-4
+	learning_rate = 1e-6
 	optimizer = tfa.optimizers.NovoGrad(learning_rate)
 	val_callback = ASRCallbackEval(valid_dataset, num_to_char)
 
 	# Initialize a Quartznet 15x5 model.
 	cfg = Config(3)
-	quartz_15x5 = QuartzNet(c_in, c_out, cfg, name="quartznet_15x5")
+	quartz_15x5 = QuartzNet(c_in, c_out + 1, cfg, name="quartznet_15x5")
 	quartz_15x5.build(input_shape=(None, None, c_in))
 	quartz_15x5.summary()
 
 	# Compile and train.
-	quartz_15x5.compile(optimizer=optimizer, loss=CTCLoss)
+	#quartz_15x5.compile(optimizer=optimizer, loss=CTCLoss)
+	quartz_15x5.compile(optimizer=optimizer, loss=CTCNNLoss)
+	'''
+	data = list(train_dataset.as_numpy_iterator())[0]
+	input_sample = data[0]
+	label_output = data[1]
+	print("data")
+	print(data) # Combined data (Input, Output). Only 1 batch long.
+	print(len(data))
+	print("Input Mel-Spec")
+	print(input_sample) # Input to the model (Mel-Spec). Shape (batch_size, time, n_fft // 2 + 1)
+	print(type(input_sample))
+	print(input_sample.shape) # (32, 1358, 193)
+	print("Ground truth labels")
+	print(label_output) # Output from the model (char). Shape (batch_size, text_length)
+	print(type(label_output))
+	print(label_output.shape) # (32, 163)
+	pred = quartz_15x5.predict(train_dataset)
+	print("Model output predictions")
+	print(pred) # Output prediction from the model (char). Shape (batch_size, , characters)
+	print(type(pred)) 
+	print(tf.shape(pred)) # (32, 679, 31)
+	print()
+	print(pred[0])
+
+	print("calculate ctc loss")
+	print("tf.nn.ctc_loss arguments")
+	label_lengths = tf.cast(tf.shape(label_output)[1], dtype="int64")
+	label_lengths = label_lengths * tf.ones(shape=(batch_size), dtype="int64")
+	logit_lengths = tf.cast(
+		tf.math.ceil(tf.shape(pred)[1] / quartz_15x5.feature_time_reduction_factor), 
+		dtype="int64"
+	)
+	logit_lengths = logit_lengths * tf.ones(shape=(batch_size), dtype="int64")
+	print(label_lengths)
+	print(logit_lengths)
+	loss = tf.nn.ctc_loss(
+		label_output, pred, label_length=label_lengths, logit_length=logit_lengths,
+		blank_index=-1, 
+		logits_time_major=False
+	)
+	print(loss)
+	exit()
+	'''
 	quartz_15x5.fit(
-		train_dataset, epochs=epochs, callbacks=[val_callback]
+		train_dataset, 
+		validation_data=valid_dataset, 
+		epochs=epochs, 
+		callbacks=[val_callback]
 	)
 
 	# Inference.
@@ -182,7 +252,7 @@ def main():
 	for batch in valid_dataset:
 		X, y = batch
 		batch_predictions = quartz_15x5.predict(X)
-		batch_predictions = decode_batch_predictions(batch_predictions)
+		batch_predictions = decode_batch_predictions(batch_predictions, num_to_char)
 		predictions.extend(batch_predictions)
 		for label in y:
 			label = tf.strings.reduce_join(num_to_char(label)).numpy().decode("UTF-8")
@@ -201,4 +271,6 @@ def main():
 
 
 if __name__ == "__main__":
-	main()
+	with tf.device("/cpu:0"):
+		main()
+	#main()
