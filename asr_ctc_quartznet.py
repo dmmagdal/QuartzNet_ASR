@@ -7,6 +7,7 @@
 # Windows/MacOS/Linux
 
 
+import os
 import string
 import numpy as np
 import pandas as pd
@@ -18,7 +19,7 @@ from IPython import display
 from jiwer import wer
 from config import Config
 from quartznet import QuartzNet, CTCLoss, decode_batch_predictions
-from quartznet import ASRCallbackEval, StringMap, CTCNNLoss
+from quartznet import ASRCallbackEval, StringMap, CTCNNLoss, EpochSave
 
 
 def main():
@@ -154,7 +155,7 @@ def main():
 	train_dataset = tf.data.Dataset.from_tensor_slices(
 		(list(df_train["file_name"]), 
 		list(df_train["normalized_transcription"]))
-	).take(batch_size)
+	).take(batch_size * 10)
 	train_dataset = (
 		train_dataset.map(
 			encode_single_sample, num_parallel_calls=tf.data.AUTOTUNE
@@ -187,16 +188,66 @@ def main():
 	learning_rate = 1e-6
 	optimizer = tfa.optimizers.NovoGrad(learning_rate)
 	val_callback = ASRCallbackEval(valid_dataset, num_to_char)
+	model_name = "quartznet_15x5"
+
+	# Test custom training pause/resuming.
+	epochs = 10
+	#checkpoint_dir = model_name + "_checkpoints/"
+	checkpoint_dir = model_name + "_checkpoints_fullmodel/"
+
+	checkpoint = keras.callbacks.ModelCheckpoint(
+		checkpoint_dir + "cp-{epoch:04d}.ckpt",
+		verbose=1,
+		save_weights_only=False,
+	)
+	'''
+	latest_checkpoint = tf.train.latest_checkpoint(checkpoint_dir)
+	print(latest_checkpoint)
+	if not latest_checkpoint:
+		initial_epoch = 0
+	else:
+		initial_epoch = int(latest_checkpoint.lstrip(checkpoint_dir + "cp-").rstrip(".ckpt"))
+	print(initial_epoch)
+	'''
+	if len(os.listdir(checkpoint_dir)) > 0:
+		latest_checkpoint = sorted(os.listdir(checkpoint_dir))[-1]
+		initial_epoch = int(
+			latest_checkpoint.lstrip(checkpoint_dir + "cp-").rstrip(".cpkt")
+		)
+		latest_checkpoint = os.path.join(checkpoint_dir, latest_checkpoint)
+	else:
+		latest_checkpoint = None
+		initial_epoch = 0
 
 	# Initialize a Quartznet 15x5 model.
 	cfg = Config(3)
-	quartz_15x5 = QuartzNet(c_in, c_out + 1, cfg, name="quartznet_15x5")
+	quartz_15x5 = QuartzNet(c_in, c_out + 1, cfg, name=model_name)
 	quartz_15x5.build(input_shape=(None, None, c_in))
 	quartz_15x5.summary()
 
 	# Compile and train.
 	#quartz_15x5.compile(optimizer=optimizer, loss=CTCLoss)
 	quartz_15x5.compile(optimizer=optimizer, loss=CTCNNLoss)
+
+	if latest_checkpoint:
+		print("Loading checkpoint: {}".format(latest_checkpoint))
+		quartz_15x5 = keras.models.load_model(latest_checkpoint)#.expect_partial()
+		#quartz_15x5 = tf.train.Checkpoint(quartz_15x5).restore(latest_checkpoint).expect_partial()
+		#quartz_15x5.load_weights(latest_checkpoint).assert_consumed()#.expect_partial()
+		#quartz_15x5 = tf.train.Checkpoint(quartz_15x5, optimizer=optimizer).restore(latest_checkpoint)
+		print(type(quartz_15x5))
+	exit(0)
+
+	quartz_15x5.fit(
+		train_dataset, 
+		validation_data=valid_dataset.take(100), 
+		callbacks=[val_callback, checkpoint],
+		epochs=epochs,
+		initial_epoch=initial_epoch,
+	)
+	quartz_15x5.save(model_name)
+	exit(0)
+
 	'''
 	data = list(train_dataset.as_numpy_iterator())[0]
 	input_sample = data[0]

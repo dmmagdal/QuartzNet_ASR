@@ -283,7 +283,7 @@ class ASRCallbackEval(keras.callbacks.Callback):
 	def on_epoch_end(self, epoch, logs=None):
 		predictions = []
 		targets = []
-		for batch in self.dataset:
+		for batch in self.dataset.take(5):
 			X, y = batch
 			batch_predictions = self.model.predict(X)
 			batch_predictions = decode_batch_predictions(
@@ -370,3 +370,17 @@ class StringMap:
 	def vocabulary_size(self):
 		#return len(self.tokens)
 		return len(self.map.keys())
+
+
+class EpochSave(keras.callbacks.Callback):
+	def __init__(self, model_save, h5=False):
+		super().__init__()
+		self.model_save = model_save
+		self.h5 = h5
+
+
+	def on_epoch_end(self, epoch, logs=None):
+		save = self.model_save + "_epoch_{}".format(epoch)
+		if self.h5:
+			save += ".h5"
+		self.model.save(save)
