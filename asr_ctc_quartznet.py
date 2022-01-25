@@ -2,7 +2,7 @@
 # Replicate the original Quartznet paper by training a Quartznet 15x5
 # model to perform automatic speech recognition (ASR) on the
 # Librispeech dataset using CTC loss.
-# Tensorflow 1.14/1.15/2.4
+# Tensorflow 2.7
 # Python 3.7
 # Windows/MacOS/Linux
 
@@ -155,7 +155,7 @@ def main():
 	train_dataset = tf.data.Dataset.from_tensor_slices(
 		(list(df_train["file_name"]), 
 		list(df_train["normalized_transcription"]))
-	).take(batch_size * 10)
+	)#.take(batch_size * 10)
 	train_dataset = (
 		train_dataset.map(
 			encode_single_sample, num_parallel_calls=tf.data.AUTOTUNE
@@ -166,7 +166,7 @@ def main():
 	valid_dataset = tf.data.Dataset.from_tensor_slices(
 		(list(df_valid["file_name"]), 
 		list(df_valid["normalized_transcription"]))
-	)
+	)#.take(batch_size * 10)
 	valid_dataset = (
 		valid_dataset.map(
 			encode_single_sample, num_parallel_calls=tf.data.AUTOTUNE
@@ -182,7 +182,8 @@ def main():
 	c_out = char_to_num.vocabulary_size()
 
 	# Training variables.
-	epochs = 1 # From Keras ASR_CTC example
+	#epochs = 1 # From Keras ASR_CTC example
+	epochs = 50 # From Keras ASR_CTC example (recommended min epochs)
 	#epochs = 300 # From Quartznet paper 
 	#epochs = 400 # From Quartznet paper (SOTA)
 	learning_rate = 1e-6
@@ -191,62 +192,81 @@ def main():
 	model_name = "quartznet_15x5"
 
 	# Test custom training pause/resuming.
-	epochs = 10
-	#checkpoint_dir = model_name + "_checkpoints/"
-	checkpoint_dir = model_name + "_checkpoints_fullmodel/"
+	#epochs = 10
 
+	# Set checkpoint path and initialize ModelCheckpoint callback.
+	checkpoint_dir = model_name + "_checkpoints_weights_only/"
 	checkpoint = keras.callbacks.ModelCheckpoint(
 		checkpoint_dir + "cp-{epoch:04d}.ckpt",
 		verbose=1,
-		save_weights_only=False,
+		save_weights_only=True,
 	)
-	'''
-	latest_checkpoint = tf.train.latest_checkpoint(checkpoint_dir)
-	print(latest_checkpoint)
-	if not latest_checkpoint:
-		initial_epoch = 0
-	else:
-		initial_epoch = int(latest_checkpoint.lstrip(checkpoint_dir + "cp-").rstrip(".ckpt"))
-	print(initial_epoch)
-	'''
-	if len(os.listdir(checkpoint_dir)) > 0:
-		latest_checkpoint = sorted(os.listdir(checkpoint_dir))[-1]
+
+	if os.path.exists(checkpoint_dir) and len(os.listdir(checkpoint_dir)) > 0:
+		# Load model weights with tf.train.latest_checkpoint.
+		latest_checkpoint = tf.train.latest_checkpoint(checkpoint_dir)
 		initial_epoch = int(
-			latest_checkpoint.lstrip(checkpoint_dir + "cp-").rstrip(".cpkt")
+			latest_checkpoint.lstrip(checkpoint_dir + "cp-").rstrip(".ckpt")
 		)
-		latest_checkpoint = os.path.join(checkpoint_dir, latest_checkpoint)
 	else:
+		# No previous checkpoint exits. Create checkpoint directory and
+		# start at the first epoch.
+		os.makedirs(checkpoint_dir, exist_ok=True)
 		latest_checkpoint = None
 		initial_epoch = 0
 
 	# Initialize a Quartznet 15x5 model.
-	cfg = Config(3)
+	cfg = Config(3) # Config for a Quartznet 15x5 model.
 	quartz_15x5 = QuartzNet(c_in, c_out + 1, cfg, name=model_name)
 	quartz_15x5.build(input_shape=(None, None, c_in))
 	quartz_15x5.summary()
 
-	# Compile and train.
+	# Compile model.
 	#quartz_15x5.compile(optimizer=optimizer, loss=CTCLoss)
 	quartz_15x5.compile(optimizer=optimizer, loss=CTCNNLoss)
 
 	if latest_checkpoint:
+		# Re-initialize a Quartznet 15x5 model (and load the previous
+		# checkpoint weights). Be sure to recompile the model
+		# (optimizer is re-initialized and is therefore different from
+		# optimizer state in previous run).
 		print("Loading checkpoint: {}".format(latest_checkpoint))
-		quartz_15x5 = keras.models.load_model(latest_checkpoint)#.expect_partial()
-		#quartz_15x5 = tf.train.Checkpoint(quartz_15x5).restore(latest_checkpoint).expect_partial()
-		#quartz_15x5.load_weights(latest_checkpoint).assert_consumed()#.expect_partial()
-		#quartz_15x5 = tf.train.Checkpoint(quartz_15x5, optimizer=optimizer).restore(latest_checkpoint)
-		print(type(quartz_15x5))
-	exit(0)
+		quartz_15x5 = QuartzNet(c_in, c_out + 1, cfg, name=model_name)
+		quartz_15x5.load_weights(latest_checkpoint).expect_partial()
+		quartz_15x5.build(input_shape=(None, None, c_in))
+		quartz_15x5.summary()
+		quartz_15x5.compile(optimizer=optimizer, loss=CTCNNLoss)
+	else:
+		# Initialize a Quartznet 15x5 model and compile it.
+		print("Starting training from beginning...")
+		quartz_15x5 = QuartzNet(c_in, c_out + 1, cfg, name=model_name)
+		quartz_15x5.build(input_shape=(None, None, c_in))
+		quartz_15x5.summary()
+		quartz_15x5.compile(optimizer=optimizer, loss=CTCNNLoss)
 
+	# Train model (with initial epoch value set) and save (its weights
+	# once finished training)
 	quartz_15x5.fit(
 		train_dataset, 
-		validation_data=valid_dataset.take(100), 
+		validation_data=valid_dataset, 
 		callbacks=[val_callback, checkpoint],
 		epochs=epochs,
 		initial_epoch=initial_epoch,
 	)
-	quartz_15x5.save(model_name)
-	exit(0)
+	save_path = checkpoint_dir + "final_weights_epoch_{epochs:04d}/"
+	os.makedirs(save_path, exist_ok=True)
+	quartz_15x5.save_weights(save_path)
+	
+	# Load saved model weights (must be same 15x5 configuration). This
+	# model can be re built (call build() with correct input_shape) and
+	# compiled (call compile with same optimizer and loss function as
+	# before) to be further trained.
+	cfg = Config(3)
+	loaded_model = QuartzNet(c_in, c_out + 1, cfg, name=model_name)
+	loaded_model.load_weights(save_path).expect_partial()
+	loaded_model.build(input_shape=(None, None, c_in))
+	loaded_model.summary()
+	loaded_model.compile(optimizer=optimizer, loss=CTCNNLoss)
 
 	'''
 	data = list(train_dataset.as_numpy_iterator())[0]
@@ -290,12 +310,6 @@ def main():
 	print(loss)
 	exit()
 	'''
-	quartz_15x5.fit(
-		train_dataset, 
-		validation_data=valid_dataset, 
-		epochs=epochs, 
-		callbacks=[val_callback]
-	)
 
 	# Inference.
 	predictions = []
