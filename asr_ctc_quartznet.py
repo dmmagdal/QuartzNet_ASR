@@ -187,7 +187,12 @@ def main():
 	#epochs = 300 # From Quartznet paper 
 	#epochs = 400 # From Quartznet paper (SOTA)
 	learning_rate = 1e-6
-	optimizer = tfa.optimizers.NovoGrad(learning_rate)
+	# Note: The original paper used NovoGrad but there are some issues
+	# in the code over resuming training with this optimizer. The Keras
+	# example used Adam and it works fine with the DeepSpeech2 model
+	# and resuming training.
+	#optimizer = tfa.optimizers.NovoGrad(learning_rate) 
+	optimizer = tf.optimizers.Adam(learning_rate)
 	val_callback = ASRCallbackEval(valid_dataset, num_to_char)
 	model_name = "quartznet_15x5"
 
@@ -195,7 +200,7 @@ def main():
 	#epochs = 10
 
 	# Set checkpoint path and initialize ModelCheckpoint callback.
-	checkpoint_dir = model_name + "_checkpoints_weights_only/"
+	checkpoint_dir = model_name + "checkpoints_weights_only/"
 	checkpoint = keras.callbacks.ModelCheckpoint(
 		checkpoint_dir + "cp-{epoch:04d}.ckpt",
 		verbose=1,
@@ -222,7 +227,7 @@ def main():
 	quartz_15x5.summary()
 
 	# Compile model.
-	#quartz_15x5.compile(optimizer=optimizer, loss=CTCLoss)
+	# quartz_15x5.compile(optimizer=optimizer, loss=CTCLoss)
 	quartz_15x5.compile(optimizer=optimizer, loss=CTCNNLoss)
 
 	if latest_checkpoint:
@@ -253,8 +258,8 @@ def main():
 		epochs=epochs,
 		initial_epoch=initial_epoch,
 	)
-	save_path = checkpoint_dir + "final_weights_epoch_{epochs:04d}/"
-	os.makedirs(save_path, exist_ok=True)
+	save_path = checkpoint_dir + f"final_weights_epoch_{epochs:04d}/"
+	# os.makedirs(save_path, exist_ok=True)
 	quartz_15x5.save_weights(save_path)
 	
 	# Load saved model weights (must be same 15x5 configuration). This
