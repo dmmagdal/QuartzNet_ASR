@@ -2,6 +2,9 @@
 # Replicate the original Quartznet paper by training a Quartznet 15x5
 # model to perform automatic speech recognition (ASR) on the
 # Librispeech dataset using CTC loss.
+# Source (reference): https://medium.com/ibm-data-ai/memory-hygiene-
+# with-tensorflow-during-model-training-and-deployment-for-inference-
+# 45cf49a15688
 # Tensorflow 2.7
 # Python 3.7
 # Windows/MacOS/Linux
@@ -12,7 +15,6 @@ import string
 import numpy as np
 import pandas as pd
 import tensorflow_addons as tfa
-#import tensorflow_datasets as tfds
 import tensorflow as tf
 from tensorflow import keras
 from IPython import display
@@ -20,6 +22,23 @@ from jiwer import wer
 from config import Config
 from quartznet import QuartzNet, CTCLoss, decode_batch_predictions
 from quartznet import ASRCallbackEval, StringMap, CTCNNLoss, EpochSave
+
+
+# Configure any available GPU devices to use a limited (4GB in this
+# case) amount of memory. This is because (as the reference medium
+# article above points out) Tensorflow is aggresively occupies the
+# full GPU memory even if it doesnt need to. This avoids memory
+# fragmentation but also bottlenecks the GPUs because only one process
+# exclusively has all the memory. Without this code, Tensorflow would
+# load the entire LJSpeech dataset to GPU (would cause OOM errors for
+# those training on consumer GPUs and slower training for those using
+# a colab GPU).
+gpus = tf.config.list_physical_devices("GPU")
+if gpus:
+	for gpu in gpus:
+		tf.config.experimental.set_virtual_device_configuration(
+			gpu, [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=4096)]
+		)
 
 
 def main():
@@ -86,7 +105,7 @@ def main():
 	print(f"Size of vaidating set: {len(df_valid)}")
 
 	# Initialize the character mappings to their values and visa versa. 
-	chars = list(string.ascii_lowercase + "?!' ")
+	chars = list(string.ascii_lowercase + "?!' ") # implicitly uses  the "~" spacer (spacer = oov_token)
 	char_to_num = StringMap(vocabulary=chars, oov_token="")
 	num_to_char = StringMap(
 		vocabulary=char_to_num.get_vocabulary(), oov_token="", 
@@ -151,7 +170,7 @@ def main():
 		return spectrogram, label
 
 	# Create dataset objects.
-	batch_size = 8#32
+	batch_size = 32#8#32
 	train_dataset = tf.data.Dataset.from_tensor_slices(
 		(list(df_train["file_name"]), 
 		list(df_train["normalized_transcription"]))
@@ -183,8 +202,8 @@ def main():
 
 	# Training variables.
 	#epochs = 1 # From Keras ASR_CTC example
-	epochs = 50 # From Keras ASR_CTC example (recommended min epochs)
-	#epochs = 300 # From Quartznet paper 
+	#epochs = 50 # From Keras ASR_CTC example (recommended min epochs)
+	epochs = 300 # From Quartznet paper 
 	#epochs = 400 # From Quartznet paper (SOTA)
 	learning_rate = 1e-6
 	# Note: The original paper used NovoGrad but there are some issues
@@ -222,7 +241,7 @@ def main():
 
 	# Initialize a Quartznet 15x5 model.
 	cfg = Config(3) # Config for a Quartznet 15x5 model.
-	quartz_15x5 = QuartzNet(c_in, c_out + 1, cfg, name=model_name)
+	quartz_15x5 = QuartzNet(c_in, c_out + 1, cfg, name=model_name) 
 	quartz_15x5.build(input_shape=(None, None, c_in))
 	quartz_15x5.summary()
 
@@ -240,6 +259,7 @@ def main():
 		quartz_15x5.load_weights(latest_checkpoint).expect_partial()
 		quartz_15x5.build(input_shape=(None, None, c_in))
 		quartz_15x5.summary()
+		# quartz_15x5.compile(optimizer=optimizer, loss=CTCLoss)
 		quartz_15x5.compile(optimizer=optimizer, loss=CTCNNLoss)
 	else:
 		# Initialize a Quartznet 15x5 model and compile it.
@@ -247,6 +267,7 @@ def main():
 		quartz_15x5 = QuartzNet(c_in, c_out + 1, cfg, name=model_name)
 		quartz_15x5.build(input_shape=(None, None, c_in))
 		quartz_15x5.summary()
+		# quartz_15x5.compile(optimizer=optimizer, loss=CTCLoss)
 		quartz_15x5.compile(optimizer=optimizer, loss=CTCNNLoss)
 
 	# Train model (with initial epoch value set) and save (its weights
@@ -259,7 +280,6 @@ def main():
 		initial_epoch=initial_epoch,
 	)
 	save_path = checkpoint_dir + f"final_weights_epoch_{epochs:04d}/"
-	# os.makedirs(save_path, exist_ok=True)
 	quartz_15x5.save_weights(save_path)
 	
 	# Load saved model weights (must be same 15x5 configuration). This
@@ -271,6 +291,7 @@ def main():
 	loaded_model.load_weights(save_path).expect_partial()
 	loaded_model.build(input_shape=(None, None, c_in))
 	loaded_model.summary()
+	# loaded_model.compile(optimizer=optimizer, loss=CTCLoss)
 	loaded_model.compile(optimizer=optimizer, loss=CTCNNLoss)
 
 	'''
@@ -341,6 +362,6 @@ def main():
 
 
 if __name__ == "__main__":
-	with tf.device("/cpu:0"):
-		main()
-	#main()
+	# with tf.device("/cpu:0"):
+	# 	main()
+	main()
