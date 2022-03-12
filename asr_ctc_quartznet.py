@@ -170,7 +170,7 @@ def main():
 		return spectrogram, label
 
 	# Create dataset objects.
-	batch_size = 32#8#32
+	batch_size = 8#32 # 32 is the batch size from the Keras ASR CTC example (use smaller).
 	train_dataset = tf.data.Dataset.from_tensor_slices(
 		(list(df_train["file_name"]), 
 		list(df_train["normalized_transcription"]))
