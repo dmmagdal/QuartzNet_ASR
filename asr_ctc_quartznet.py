@@ -5,6 +5,9 @@
 # Source (reference): https://medium.com/ibm-data-ai/memory-hygiene-
 # with-tensorflow-during-model-training-and-deployment-for-inference-
 # 45cf49a15688
+# Source (another reference): https://towardsdatascience.com/audio-
+# deep-learning-made-simple-automatic-speech-recognition-asr-how-it-
+# works-716cfce4c706
 # Tensorflow 2.7
 # Python 3.7
 # Windows/MacOS/Linux
@@ -203,8 +206,8 @@ def main():
 	# Training variables.
 	#epochs = 1 # From Keras ASR_CTC example
 	#epochs = 50 # From Keras ASR_CTC example (recommended min epochs)
-	epochs = 300 # From Quartznet paper 
-	#epochs = 400 # From Quartznet paper (SOTA)
+	#epochs = 300 # From Quartznet paper 
+	epochs = 400 # From Quartznet paper (SOTA)
 	learning_rate = 1e-6
 	# Note: The original paper used NovoGrad but there are some issues
 	# in the code over resuming training with this optimizer. The Keras

@@ -23,3 +23,4 @@ Implement Nvidia's QuartzNet neural net for the task of Automatic Speech Recogni
  - [LibriSpeech download page](https://www.openslr.org/12/)
  - [LJSpeech download page](https://keithito.com/LJ-Speech-Dataset/)
  - [Automatic Speech Recognition using CTC Keras example](https://keras.io/examples/audio/ctc_asr/)
+ - [Reference Medium article on ASR](https://towardsdatascience.com/audio-deep-learning-made-simple-automatic-speech-recognition-asr-how-it-works-716cfce4c706)
